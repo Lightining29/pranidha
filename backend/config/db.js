@@ -9,7 +9,9 @@ export const connectDB = async () => {
     // Set a short timeout (3 seconds) so the app doesn't hang if MongoDB is offline
     mongoose.set('strictQuery', false);
     const conn = await mongoose.connect(connUri, {
-      serverSelectionTimeoutMS: 3000
+      serverSelectionTimeoutMS: 3000,
+      connectTimeoutMS: 3000,
+      socketTimeoutMS: 3000
     });
     
     console.log(`MongoDB Connected: ${conn.connection.host}`);

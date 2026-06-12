@@ -26,10 +26,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Connect to Database & Seed
-await connectDB();
-await seedDatabase();
-
 // Register API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
@@ -75,6 +71,14 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Pranidha School backend running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  
+  // Connect to Database & Seed asynchronously
+  try {
+    await connectDB();
+    await seedDatabase();
+  } catch (err) {
+    console.error('Error during database initialization:', err);
+  }
 });
