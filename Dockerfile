@@ -21,6 +21,7 @@ EXPOSE 5000
 
 # Set environment to production
 ENV NODE_ENV=production
+ENV PORT=5000
 
 # Start the Express server
 WORKDIR /app/backend
