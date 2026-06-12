@@ -35,14 +35,28 @@ app.use('/api/public', publicRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Root Route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Pranidha International School Kindergarten API Server!',
-    version: '1.0.0',
-    mode: process.env.NODE_ENV || 'development'
+// Serve Frontend static assets in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendDistPath = path.join(__dirname, '../frontend/dist');
+  app.use(express.static(frontendDistPath));
+  
+  app.get('*', (req, res, next) => {
+    // Avoid intercepting API routes or uploads
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
-});
+} else {
+  // Root Route
+  app.get('/', (req, res) => {
+    res.json({
+      message: 'Welcome to Pranidha International School Kindergarten API Server!',
+      version: '1.0.0',
+      mode: process.env.NODE_ENV || 'development'
+    });
+  });
+}
 
 // Fallback Route Handler (404)
 app.use((req, res, next) => {
