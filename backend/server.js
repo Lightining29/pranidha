@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 import { connectDB } from './config/db.js';
 import { seedDatabase } from './config/seed.js';
@@ -35,9 +36,9 @@ app.use('/api/public', publicRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Serve Frontend static assets in production
-if (process.env.NODE_ENV === 'production') {
-  const frontendDistPath = path.join(__dirname, '../frontend/dist');
+// Serve Frontend static assets if built, otherwise serve API welcome message
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(path.join(frontendDistPath, 'index.html'))) {
   app.use(express.static(frontendDistPath));
   
   app.get('*', (req, res, next) => {
@@ -48,7 +49,7 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
 } else {
-  // Root Route
+  // Root Route fallback
   app.get('/', (req, res) => {
     res.json({
       message: 'Welcome to Pranidha International School Kindergarten API Server!',
