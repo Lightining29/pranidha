@@ -2782,13 +2782,11 @@ export default function AdminDashboard() {
             </button>
 
             {/* Receipt Header */}
-            <div className="relative z-10 pb-3 text-center border-b border-dashed border-slate-250">
-              <h2 className="text-[#5B468C] text-base font-extrabold tracking-tight font-quicksand">PRANIDHA INTERNATIONAL SCHOOL</h2>
-              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Kindergarten Division</p>
-              <p className="text-[8px] text-slate-400 mt-0.5">123 Sunshine Street, Sector 5 | +91 98765 43210</p>
-              <div className="inline-block bg-emerald-50 text-emerald-700 border border-emerald-200/50 text-[9px] font-bold px-2.5 py-0.5 rounded-full mt-2 uppercase tracking-wider font-mono">
-                Official Fee Slip
-              </div>
+            <div className="relative z-10 pb-4 text-center border-b border-dashed border-slate-200">
+              <img src="/logo.png" alt="Pranidha Logo" className="mx-auto h-12 mb-2" />
+              <h2 className="text-2xl font-extrabold tracking-tight text-[#5B468C]">PRANIDHA INTERNATIONAL SCHOOL</h2>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Official Fee Slip</p>
+              <p className="text-[8px] text-slate-400 mt-1">123 Sunshine Street, Sector 5 | +91 98765 43210</p>
             </div>
 
             {/* Receipt Details Grid */}
