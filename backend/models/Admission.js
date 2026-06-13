@@ -26,7 +26,25 @@ const AdmissionSchema = new mongoose.Schema({
   documents: {
     birthCertificate: { type: String },
     photo: { type: String },
-    parentIdProof: { type: String }
+    parentIdProof: { type: String },
+    reportCard: { type: String },
+    transferCertificate: { type: String },
+    aadhaarCard: { type: String },
+    fatherAadhaarCard: { type: String },
+    motherAadhaarCard: { type: String },
+    addressProofType: { type: String },
+    addressProof: { type: String }
+  },
+  documentData: {
+    birthCertificate: { data: Buffer, contentType: String, filename: String },
+    photo: { data: Buffer, contentType: String, filename: String },
+    parentIdProof: { data: Buffer, contentType: String, filename: String },
+    reportCard: { data: Buffer, contentType: String, filename: String },
+    transferCertificate: { data: Buffer, contentType: String, filename: String },
+    aadhaarCard: { data: Buffer, contentType: String, filename: String },
+    fatherAadhaarCard: { data: Buffer, contentType: String, filename: String },
+    motherAadhaarCard: { data: Buffer, contentType: String, filename: String },
+    addressProof: { data: Buffer, contentType: String, filename: String }
   },
   status: {
     type: String,

@@ -36,23 +36,15 @@ const galleryFilter = (req, file, cb) => {
 
 const admissionsFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (file.fieldname === 'birthCertificate') {
-    if (ext === '.pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Birth certificate must be a PDF file'), false);
-    }
-  } else if (file.fieldname === 'photo') {
-    const allowedImages = ['.png', '.jpg', '.jpeg'];
-    if (allowedImages.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Passport size photo must be a JPG, JPEG, or PNG image'), false);
-    }
-  } else {
+  const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg'];
+  if (allowedExts.includes(ext)) {
     cb(null, true);
+  } else {
+    cb(new Error(`Invalid file type for ${file.fieldname}. Only PDF, JPG, JPEG, and PNG files are allowed.`), false);
   }
 };
+
+const memoryStorage = multer.memoryStorage();
 
 export const uploadGallery = multer({
   storage,
@@ -61,7 +53,7 @@ export const uploadGallery = multer({
 });
 
 export const uploadAdmissions = multer({
-  storage,
+  storage: memoryStorage,
   fileFilter: admissionsFilter,
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });

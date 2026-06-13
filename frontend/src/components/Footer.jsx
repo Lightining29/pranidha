@@ -6,7 +6,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="relative pt-16 pb-8 mt-16 border-t-8 bg-brandNavy text-slate-300 border-brandYellow">
+    <footer className="relative pt-16 pb-8 mt-16 border-t-8 bg-brandNavy text-slate-300 border-brandYellow print:hidden">
       {/* Curved Decorative wave at top */}
       <div className="absolute top-0 left-0 right-0 h-4 bg-brandCoral" />
 

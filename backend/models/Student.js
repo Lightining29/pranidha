@@ -29,6 +29,15 @@ const StudentSchema = new mongoose.Schema({
     ref: 'Parent',
     required: true
   },
+  photo: {
+    type: String,
+    default: ''
+  },
+  photoData: {
+    data: Buffer,
+    contentType: String,
+    filename: String
+  },
   teacherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Teacher'

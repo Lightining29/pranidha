@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Student from '../models/Student.js';
 import Parent from '../models/Parent.js';
@@ -9,11 +10,90 @@ import Announcement from '../models/Announcement.js';
 import Gallery from '../models/Gallery.js';
 import Fee from '../models/Fee.js';
 import Query from '../models/Query.js';
+import Receipt from '../models/Receipt.js';
 import { protect, authorize } from '../middleware/auth.js';
 import mockStore from '../config/mockStore.js';
 import { uploadGallery, uploadAdmissions } from '../middleware/upload.js';
 
 const router = express.Router();
+
+// @desc    Retrieve admission document in binary
+// @route   GET /api/admin/admissions/document/:id/:fieldName
+router.get('/admissions/document/:id/:fieldName', async (req, res) => {
+  try {
+    const { id, fieldName } = req.params;
+    if (mockStore.isMock) {
+      const admission = await mockStore.findById('admissions', id);
+      if (!admission) return res.status(404).send('Admission record not found');
+      
+      const doc = admission.documentData?.[fieldName];
+      if (doc && doc.data) {
+        res.contentType(doc.contentType || 'application/octet-stream');
+        return res.send(Buffer.from(doc.data, 'base64'));
+      }
+      const path = admission.documents?.[fieldName];
+      if (path && typeof path === 'string') {
+        return res.redirect(path);
+      }
+      return res.status(404).send('Document not found');
+    }
+
+    const admission = await Admission.findById(id);
+    if (!admission) return res.status(404).send('Admission record not found');
+    
+    const doc = admission.documentData?.[fieldName];
+    if (doc && doc.data) {
+      res.contentType(doc.contentType || 'application/octet-stream');
+      return res.send(doc.data);
+    }
+    const path = admission.documents?.[fieldName];
+    if (path && typeof path === 'string') {
+      return res.redirect(path);
+    }
+    return res.status(404).send('Document not found');
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+// @desc    Retrieve student photo in binary
+// @route   GET /api/admin/students/photo/:id
+router.get('/students/photo/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (mockStore.isMock) {
+      const student = await mockStore.findById('students', id);
+      if (!student) return res.status(404).send('Student not found');
+      
+      const photo = student.photoData;
+      if (photo && photo.data) {
+        res.contentType(photo.contentType || 'image/png');
+        return res.send(Buffer.from(photo.data, 'base64'));
+      }
+      const path = student.photo;
+      if (path && typeof path === 'string') {
+        return res.redirect(path);
+      }
+      return res.status(404).send('Photo not found');
+    }
+
+    const student = await Student.findById(id);
+    if (!student) return res.status(404).send('Student not found');
+    
+    const photo = student.photoData;
+    if (photo && photo.data) {
+      res.contentType(photo.contentType || 'image/png');
+      return res.send(photo.data);
+    }
+    const path = student.photo;
+    if (path && typeof path === 'string') {
+      return res.redirect(path);
+    }
+    return res.status(404).send('Photo not found');
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
 
 // Apply auth protection & role check to all admin routes
 router.use(protect);
@@ -85,12 +165,32 @@ router.get('/stats', async (req, res) => {
 // @route   GET /api/admin/admissions
 router.get('/admissions', async (req, res) => {
   try {
+    const mapAdmissionDocs = (adm) => {
+      const obj = adm.toObject ? adm.toObject() : { ...adm };
+      if (!obj.documents) return obj;
+      const mappedDocs = { ...obj.documents };
+      const documentFields = [
+        'birthCertificate', 'photo', 'reportCard', 'transferCertificate',
+        'aadhaarCard', 'fatherAadhaarCard', 'motherAadhaarCard', 'addressProof'
+      ];
+      documentFields.forEach(field => {
+        const doc = obj.documentData?.[field];
+        if (doc && doc.data) {
+          mappedDocs[field] = `/api/admin/admissions/document/${obj._id}/${field}`;
+        }
+      });
+      obj.documents = mappedDocs;
+      return obj;
+    };
+
     if (mockStore.isMock) {
       const list = await mockStore.find('admissions');
-      return res.json({ success: true, count: list.length, data: list });
+      const mappedList = list.map(mapAdmissionDocs);
+      return res.json({ success: true, count: mappedList.length, data: mappedList });
     }
     const list = await Admission.find().sort({ submissionDate: -1 });
-    res.json({ success: true, count: list.length, data: list });
+    const mappedList = list.map(mapAdmissionDocs);
+    res.json({ success: true, count: mappedList.length, data: mappedList });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -145,13 +245,20 @@ router.put('/admissions/:id', async (req, res) => {
         const teacherId = teachers[0]?._id || null;
 
         // Create the Student
+        const studentDbId = 'std_' + Math.random().toString(36).substr(2, 9);
+        const generatedStudentId = `STD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const hasPhoto = admission.documentData?.photo?.data;
         const newStudent = await mockStore.create('students', {
+          _id: studentDbId,
           name: admission.studentDetails.name,
+          studentId: generatedStudentId,
           dateOfBirth: admission.studentDetails.dateOfBirth,
           gender: admission.studentDetails.gender,
           class: admission.studentDetails.class,
           parentId: parentProfile._id,
           teacherId,
+          photo: hasPhoto ? `/api/admin/students/photo/${studentDbId}` : (admission.documents?.photo || ''),
+          photoData: admission.documentData?.photo,
           attendance: [],
           progressReports: [],
           activities: []
@@ -219,13 +326,20 @@ router.put('/admissions/:id', async (req, res) => {
       const firstTeacher = await Teacher.findOne();
 
       // 2. Create student
+      const studentDbId = new mongoose.Types.ObjectId();
+      const generatedStudentId = `STD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const hasPhoto = admission.documentData?.photo?.data;
       const student = await Student.create({
+        _id: studentDbId,
         name: admission.studentDetails.name,
+        studentId: generatedStudentId,
         dateOfBirth: admission.studentDetails.dateOfBirth,
         gender: admission.studentDetails.gender,
         class: admission.studentDetails.class,
         parentId: parent._id,
-        teacherId: firstTeacher ? firstTeacher._id : null
+        teacherId: firstTeacher ? firstTeacher._id : null,
+        photo: hasPhoto ? `/api/admin/students/photo/${studentDbId}` : (admission.documents?.photo || ''),
+        photoData: admission.documentData?.photo
       });
 
       // 3. Link child
@@ -265,10 +379,24 @@ router.get('/students', async (req, res) => {
   try {
     if (mockStore.isMock) {
       const list = await mockStore.find('students');
-      return res.json({ success: true, count: list.length, data: list });
+      const mappedList = list.map(std => {
+        const stdObj = { ...std };
+        if (stdObj.photoData && stdObj.photoData.data) {
+          stdObj.photo = `/api/admin/students/photo/${stdObj._id}`;
+        }
+        return stdObj;
+      });
+      return res.json({ success: true, count: mappedList.length, data: mappedList });
     }
     const list = await Student.find().populate('parentId teacherId');
-    res.json({ success: true, count: list.length, data: list });
+    const mappedList = list.map(std => {
+      const stdObj = std.toObject();
+      if (stdObj.photoData && stdObj.photoData.data) {
+        stdObj.photo = `/api/admin/students/photo/${stdObj._id}`;
+      }
+      return stdObj;
+    });
+    res.json({ success: true, count: mappedList.length, data: mappedList });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -291,9 +419,15 @@ router.delete('/students/:id', async (req, res) => {
 // Create Admission & Student directly (Admin-only)
 router.post('/admissions/create', uploadAdmissions.fields([
   { name: 'birthCertificate', maxCount: 1 },
-  { name: 'photo', maxCount: 1 }
+  { name: 'photo', maxCount: 1 },
+  { name: 'reportCard', maxCount: 1 },
+  { name: 'transferCertificate', maxCount: 1 },
+  { name: 'aadhaarCard', maxCount: 1 },
+  { name: 'fatherAadhaarCard', maxCount: 1 },
+  { name: 'motherAadhaarCard', maxCount: 1 },
+  { name: 'addressProof', maxCount: 1 }
 ]), async (req, res) => {
-  let { studentDetails, parentDetails, password } = req.body;
+  let { studentDetails, parentDetails, password, admissionFee, addressProofType } = req.body;
   
   try {
     if (typeof studentDetails === 'string') studentDetails = JSON.parse(studentDetails);
@@ -304,14 +438,56 @@ router.post('/admissions/create', uploadAdmissions.fields([
 
     const birthCertificateFile = req.files?.['birthCertificate']?.[0];
     const photoFile = req.files?.['photo']?.[0];
+    const reportCardFile = req.files?.['reportCard']?.[0];
+    const transferCertificateFile = req.files?.['transferCertificate']?.[0];
+    const aadhaarCardFile = req.files?.['aadhaarCard']?.[0];
+    const fatherAadhaarCardFile = req.files?.['fatherAadhaarCard']?.[0];
+    const motherAadhaarCardFile = req.files?.['motherAadhaarCard']?.[0];
+    const addressProofFile = req.files?.['addressProof']?.[0];
 
-    const documents = {
-      birthCertificate: birthCertificateFile ? `/uploads/${birthCertificateFile.filename}` : 'birth_cert_uploaded.pdf',
-      photo: photoFile ? `/uploads/${photoFile.filename}` : 'passport_photo_uploaded.jpg',
-      parentIdProof: 'id_proof_uploaded.pdf'
+    const isMock = mockStore.isMock;
+    const admissionId = isMock
+      ? 'adm_' + Math.random().toString(36).substr(2, 9)
+      : new mongoose.Types.ObjectId();
+    const studentDbId = isMock
+      ? 'std_' + Math.random().toString(36).substr(2, 9)
+      : new mongoose.Types.ObjectId();
+
+    const makeDocData = (file) => {
+      if (!file) return undefined;
+      return {
+        data: isMock ? file.buffer.toString('base64') : file.buffer,
+        contentType: file.mimetype,
+        filename: file.originalname
+      };
     };
 
-    if (mockStore.isMock) {
+    const documents = {
+      birthCertificate: birthCertificateFile ? `/api/admin/admissions/document/${admissionId}/birthCertificate` : '',
+      photo: photoFile ? `/api/admin/admissions/document/${admissionId}/photo` : '',
+      parentIdProof: 'id_proof_uploaded.pdf',
+      reportCard: reportCardFile ? `/api/admin/admissions/document/${admissionId}/reportCard` : '',
+      transferCertificate: transferCertificateFile ? `/api/admin/admissions/document/${admissionId}/transferCertificate` : '',
+      aadhaarCard: aadhaarCardFile ? `/api/admin/admissions/document/${admissionId}/aadhaarCard` : '',
+      fatherAadhaarCard: fatherAadhaarCardFile ? `/api/admin/admissions/document/${admissionId}/fatherAadhaarCard` : '',
+      motherAadhaarCard: motherAadhaarCardFile ? `/api/admin/admissions/document/${admissionId}/motherAadhaarCard` : '',
+      addressProofType: addressProofType || '',
+      addressProof: addressProofFile ? `/api/admin/admissions/document/${admissionId}/addressProof` : ''
+    };
+
+    const documentData = {
+      birthCertificate: makeDocData(birthCertificateFile),
+      photo: makeDocData(photoFile),
+      parentIdProof: undefined,
+      reportCard: makeDocData(reportCardFile),
+      transferCertificate: makeDocData(transferCertificateFile),
+      aadhaarCard: makeDocData(aadhaarCardFile),
+      fatherAadhaarCard: makeDocData(fatherAadhaarCardFile),
+      motherAadhaarCard: makeDocData(motherAadhaarCardFile),
+      addressProof: makeDocData(addressProofFile)
+    };
+
+    if (isMock) {
       let parentUser = await mockStore.findOne('users', { email: parentDetails.email });
       let parentProfile;
       if (!parentUser) {
@@ -338,6 +514,7 @@ router.post('/admissions/create', uploadAdmissions.fields([
       const teacherId = teachers[0]?._id || null;
 
       const newStudent = await mockStore.create('students', {
+        _id: studentDbId,
         name: studentDetails.name,
         studentId: generatedStudentId,
         dateOfBirth: studentDetails.dateOfBirth,
@@ -345,6 +522,8 @@ router.post('/admissions/create', uploadAdmissions.fields([
         class: studentDetails.class,
         parentId: parentProfile._id,
         teacherId,
+        photo: photoFile ? `/api/admin/students/photo/${studentDbId}` : '',
+        photoData: photoFile ? makeDocData(photoFile) : undefined,
         attendance: [],
         progressReports: [],
         activities: []
@@ -354,14 +533,43 @@ router.post('/admissions/create', uploadAdmissions.fields([
       await mockStore.findByIdAndUpdate('parents', parentProfile._id, { children: parentProfile.children });
 
       const admission = await mockStore.create('admissions', {
+        _id: admissionId,
         applicationNumber: appNo,
         studentDetails,
         parentDetails,
         documents,
+        documentData,
         status: 'approved',
         remarks: 'Direct Admin Admission',
         submissionDate: new Date()
       });
+
+      // Create Admission Fee invoice + receipt if provided
+      let createdAdmissionFee = null;
+      let createdReceipt = null;
+      const admissionFeeVal = Number(admissionFee) || 0;
+      if (admissionFeeVal > 0) {
+        const txnId = `TXN-ADM-${Math.floor(100000 + Math.random() * 900000)}`;
+        createdAdmissionFee = await mockStore.create('fees', {
+          studentId: newStudent._id,
+          amount: admissionFeeVal,
+          term: 'Admission Fee',
+          dueDate: new Date(),
+          status: 'paid',
+          paymentDate: new Date(),
+          transactionId: txnId,
+          paymentMethod: 'Admission Desk Cash'
+        });
+        createdReceipt = await mockStore.create('receipts', {
+          feeId: createdAdmissionFee._id,
+          studentId: newStudent._id,
+          receiptNumber: `REC-ADM-${Date.now()}`,
+          amountPaid: admissionFeeVal,
+          paymentMethod: 'Admission Desk Cash',
+          paymentDate: new Date(),
+          transactionId: txnId
+        });
+      }
 
       for (let i = 1; i <= 12; i++) {
         const dueDate = new Date();
@@ -378,7 +586,12 @@ router.post('/admissions/create', uploadAdmissions.fields([
         });
       }
 
-      return res.status(201).json({ success: true, message: 'Admission created and student registered successfully!', data: admission });
+      return res.status(201).json({ 
+        success: true, 
+        message: 'Admission created and student registered successfully!', 
+        data: admission,
+        receipt: createdReceipt
+      });
     }
 
     // MongoDB
@@ -406,26 +619,58 @@ router.post('/admissions/create', uploadAdmissions.fields([
     const firstTeacher = await Teacher.findOne();
 
     const student = await Student.create({
+      _id: studentDbId,
       name: studentDetails.name,
       studentId: generatedStudentId,
       dateOfBirth: studentDetails.dateOfBirth,
       gender: studentDetails.gender,
       class: studentDetails.class,
       parentId: parent._id,
-      teacherId: firstTeacher ? firstTeacher._id : null
+      teacherId: firstTeacher ? firstTeacher._id : null,
+      photo: photoFile ? `/api/admin/students/photo/${studentDbId}` : '',
+      photoData: photoFile ? makeDocData(photoFile) : undefined
     });
 
     parent.children.push(student._id);
     await parent.save();
 
     const admission = await Admission.create({
+      _id: admissionId,
       applicationNumber: appNo,
       studentDetails,
       parentDetails,
       documents,
+      documentData,
       status: 'approved',
       remarks: 'Direct Admin Admission'
     });
+
+    // Create Admission Fee invoice + receipt if provided
+    let createdAdmissionFee = null;
+    let createdReceipt = null;
+    const admissionFeeVal = Number(admissionFee) || 0;
+    if (admissionFeeVal > 0) {
+      const txnId = `TXN-ADM-${Math.floor(100000 + Math.random() * 900000)}`;
+      createdAdmissionFee = await Fee.create({
+        studentId: student._id,
+        amount: admissionFeeVal,
+        term: 'Admission Fee',
+        dueDate: new Date(),
+        status: 'paid',
+        paymentDate: new Date(),
+        transactionId: txnId,
+        paymentMethod: 'Admission Desk Cash'
+      });
+      createdReceipt = await Receipt.create({
+        feeId: createdAdmissionFee._id,
+        studentId: student._id,
+        receiptNumber: `REC-ADM-${Date.now()}`,
+        amountPaid: admissionFeeVal,
+        paymentMethod: 'Admission Desk Cash',
+        paymentDate: new Date(),
+        transactionId: txnId
+      });
+    }
 
     for (let i = 1; i <= 12; i++) {
       const dueDate = new Date();
@@ -442,7 +687,12 @@ router.post('/admissions/create', uploadAdmissions.fields([
       });
     }
 
-    res.status(201).json({ success: true, message: 'Admission created and student registered successfully!', data: admission });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Admission created and student registered successfully!', 
+      data: admission,
+      receipt: createdReceipt
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -828,5 +1078,95 @@ router.put('/queries/:id', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// @desc    Get receipt details for an invoice (Admin)
+// @route   GET /api/admin/receipt/:feeId
+router.get('/receipt/:feeId', async (req, res) => {
+  try {
+    if (mockStore.isMock) {
+      const receipt = await mockStore.findOne('receipts', { feeId: req.params.feeId });
+      if (!receipt) return res.status(404).json({ success: false, message: 'Receipt not found' });
+      const student = await mockStore.findById('students', receipt.studentId);
+      const fee = await mockStore.findById('fees', receipt.feeId);
+      return res.json({ 
+        success: true, 
+        receipt, 
+        student: student ? { name: student.name, studentId: student.studentId, class: student.class } : null,
+        fee: fee ? { term: fee.term } : null
+      });
+    }
+
+    const receipt = await Receipt.findOne({ feeId: req.params.feeId })
+      .populate('studentId', 'name studentId class')
+      .populate('feeId', 'term');
+      
+    if (!receipt) return res.status(404).json({ success: false, message: 'Receipt not found' });
+
+    res.json({ 
+      success: true, 
+      receipt,
+      student: receipt.studentId,
+      fee: receipt.feeId
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @desc    Admin marks a fee as paid (Desk cash collection)
+// @route   POST /api/admin/fees/:feeId/pay
+router.post('/fees/:feeId/pay', async (req, res) => {
+  const { paymentMethod } = req.body;
+  const txnId = `TXN-DESK-${Math.floor(100000000 + Math.random() * 900000000)}`;
+
+  try {
+    if (mockStore.isMock) {
+      const fee = await mockStore.findByIdAndUpdate('fees', req.params.feeId, {
+        status: 'paid',
+        paymentDate: new Date(),
+        transactionId: txnId,
+        paymentMethod: paymentMethod || 'Admission Desk Cash'
+      });
+      if (!fee) return res.status(404).json({ success: false, message: 'Fee invoice not found' });
+      
+      const receipt = await mockStore.create('receipts', {
+        feeId: req.params.feeId,
+        studentId: fee.studentId,
+        receiptNumber: `REC-${Date.now()}`,
+        amountPaid: fee.amount,
+        paymentMethod: paymentMethod || 'Admission Desk Cash',
+        paymentDate: new Date(),
+        transactionId: txnId
+      });
+
+      return res.json({ success: true, message: 'Fee marked as paid successfully!', data: fee, receipt });
+    }
+
+    const fee = await Fee.findById(req.params.feeId);
+    if (!fee) return res.status(404).json({ success: false, message: 'Fee invoice not found' });
+
+    fee.status = 'paid';
+    fee.paymentDate = new Date();
+    fee.transactionId = txnId;
+    fee.paymentMethod = paymentMethod || 'Admission Desk Cash';
+    await fee.save();
+
+    const receipt = await Receipt.create({
+      feeId: fee._id,
+      studentId: fee.studentId,
+      receiptNumber: `REC-${Date.now()}`,
+      amountPaid: fee.amount,
+      paymentMethod: paymentMethod || 'Admission Desk Cash',
+      paymentDate: new Date(),
+      transactionId: txnId
+    });
+
+    res.json({ success: true, message: 'Fee marked as paid successfully!', data: fee, receipt });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Document serving endpoints relocated to the top (public routes)
 
 export default router;
