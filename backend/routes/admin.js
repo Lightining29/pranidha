@@ -11,11 +11,198 @@ import Gallery from '../models/Gallery.js';
 import Fee from '../models/Fee.js';
 import Query from '../models/Query.js';
 import Receipt from '../models/Receipt.js';
+import FeeStructure from '../models/FeeStructure.js';
+import FineRule from '../models/FineRule.js';
 import { protect, authorize } from '../middleware/auth.js';
 import mockStore from '../config/mockStore.js';
 import { uploadGallery, uploadAdmissions } from '../middleware/upload.js';
 
 const router = express.Router();
+
+async function assignFeesForStudent(studentId, className, isMock) {
+  let structure = null;
+  if (isMock) {
+    structure = await mockStore.findOne('feeStructures', { class: className, isActive: true });
+  } else {
+    structure = await FeeStructure.findOne({ class: className, isActive: true });
+  }
+
+  let monthlySum = 150; // fallback default
+  let admissionFee = 0;
+  let annualCharges = 0;
+  let examinationFee = 0;
+
+  if (structure) {
+    admissionFee = structure.admissionFee || 0;
+    annualCharges = structure.annualCharges || 0;
+    examinationFee = structure.examinationFee || 0;
+    
+    monthlySum = (structure.tuitionFee || 0) +
+                 (structure.computerFee || 0) +
+                 (structure.developmentFee || 0) +
+                 (structure.activityFee || 0) +
+                 (structure.smartClassFee || 0) +
+                 (structure.transportFee || 0) +
+                 (structure.customFees || []).reduce((sum, f) => sum + (f.amount || 0), 0);
+  }
+
+  // Create Admission Fee if any
+  if (admissionFee > 0) {
+    const dueDate = new Date();
+    if (isMock) {
+      await mockStore.create('fees', {
+        studentId,
+        amount: admissionFee,
+        term: 'Admission Fee',
+        dueDate,
+        status: 'pending',
+        paymentDate: null,
+        transactionId: '',
+        paymentMethod: ''
+      });
+    } else {
+      await Fee.create({
+        studentId,
+        amount: admissionFee,
+        term: 'Admission Fee',
+        dueDate,
+        status: 'pending'
+      });
+    }
+  }
+
+  // Create Annual Charges if any
+  if (annualCharges > 0) {
+    const dueDate = new Date();
+    if (isMock) {
+      await mockStore.create('fees', {
+        studentId,
+        amount: annualCharges,
+        term: 'Annual Charges',
+        dueDate,
+        status: 'pending',
+        paymentDate: null,
+        transactionId: '',
+        paymentMethod: ''
+      });
+    } else {
+      await Fee.create({
+        studentId,
+        amount: annualCharges,
+        term: 'Annual Charges',
+        dueDate,
+        status: 'pending'
+      });
+    }
+  }
+
+  // Create Examination Fee if any
+  if (examinationFee > 0) {
+    const dueDate = new Date();
+    dueDate.setMonth(dueDate.getMonth() + 6);
+    if (isMock) {
+      await mockStore.create('fees', {
+        studentId,
+        amount: examinationFee,
+        term: 'Examination Fee',
+        dueDate,
+        status: 'pending',
+        paymentDate: null,
+        transactionId: '',
+        paymentMethod: ''
+      });
+    } else {
+      await Fee.create({
+        studentId,
+        amount: examinationFee,
+        term: 'Examination Fee',
+        dueDate,
+        status: 'pending'
+      });
+    }
+  }
+
+  // Create 12 Monthly Tuition/Component Fee invoices
+  for (let i = 1; i <= 12; i++) {
+    const dueDate = new Date();
+    dueDate.setMonth(dueDate.getMonth() + (i - 1));
+    const isPaid = i === 1; // Month 1 paid by default
+    
+    if (isMock) {
+      await mockStore.create('fees', {
+        studentId,
+        amount: monthlySum,
+        term: `Month ${i} Tuition & Component Fees`,
+        dueDate,
+        status: isPaid ? 'paid' : 'pending',
+        paymentDate: isPaid ? new Date() : null,
+        transactionId: isPaid ? `TXN-INIT-${Math.floor(100000 + Math.random() * 900000)}` : '',
+        paymentMethod: isPaid ? 'Admission Desk Cash' : ''
+      });
+    } else {
+      await Fee.create({
+        studentId,
+        amount: monthlySum,
+        term: `Month ${i} Tuition & Component Fees`,
+        dueDate,
+        status: isPaid ? 'paid' : 'pending',
+        paymentDate: isPaid ? new Date() : null,
+        transactionId: isPaid ? `TXN-INIT-${Math.floor(100000 + Math.random() * 900000)}` : '',
+        paymentMethod: isPaid ? 'Admission Desk Cash' : ''
+      });
+    }
+  }
+}
+
+async function getCalculatedFees(rawFees) {
+  let fineRules = [];
+  if (mockStore.isMock) {
+    fineRules = await mockStore.find('fineRules');
+  } else {
+    fineRules = await FineRule.find();
+  }
+
+  return rawFees.map(feeObj => {
+    const fee = feeObj.toObject ? feeObj.toObject() : { ...feeObj };
+    
+    if (fee.status === 'paid' || !fee.dueDate) {
+      fee.fine = 0;
+      fee.totalAmount = fee.amount;
+      return fee;
+    }
+
+    const dueDate = new Date(fee.dueDate);
+    const now = new Date();
+    if (now <= dueDate) {
+      fee.fine = 0;
+      fee.totalAmount = fee.amount;
+      return fee;
+    }
+
+    const diffTime = Math.abs(now - dueDate);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    let fineAmount = 0;
+    if (diffDays > 0) {
+      for (const rule of fineRules) {
+        if (diffDays >= rule.minDays && diffDays <= rule.maxDays) {
+          fineAmount = rule.fineAmount;
+          break;
+        }
+      }
+      if (fineAmount === 0 && fineRules.length > 0) {
+        const sortedRules = [...fineRules].sort((a, b) => b.maxDays - a.maxDays);
+        if (diffDays > sortedRules[0].maxDays) {
+          fineAmount = sortedRules[0].fineAmount;
+        }
+      }
+    }
+
+    fee.fine = fineAmount;
+    fee.totalAmount = fee.amount + fineAmount;
+    return fee;
+  });
+}
 
 // @desc    Retrieve admission document in binary
 // @route   GET /api/admin/admissions/document/:id/:fieldName
@@ -268,21 +455,8 @@ router.put('/admissions/:id', async (req, res) => {
         parentProfile.children.push(newStudent._id);
         await mockStore.findByIdAndUpdate('parents', parentProfile._id, { children: parentProfile.children });
 
-        // Add 12 monthly fee invoices (first paid, rest pending)
-        for (let i = 1; i <= 12; i++) {
-          const dueDate = new Date();
-          dueDate.setMonth(dueDate.getMonth() + (i - 1));
-          await mockStore.create('fees', {
-            studentId: newStudent._id,
-            amount: 150,
-            term: `Month ${i} Tuition Fee`,
-            dueDate: dueDate,
-            status: i === 1 ? 'paid' : 'pending',
-            paymentDate: i === 1 ? new Date() : null,
-            transactionId: i === 1 ? `TXN-INIT-${Math.floor(100000 + Math.random() * 900000)}` : '',
-            paymentMethod: i === 1 ? 'Admission Desk Cash' : ''
-          });
-        }
+        // Automatically assign fee structure according to class
+        await assignFeesForStudent(newStudent._id, newStudent.class, true);
       }
 
       return res.json({ success: true, message: `Admission application status updated to ${status}!`, data: admission });
@@ -346,21 +520,8 @@ router.put('/admissions/:id', async (req, res) => {
       parent.children.push(student._id);
       await parent.save();
 
-      // 4. Create 12 monthly invoices (first paid, rest pending)
-      for (let i = 1; i <= 12; i++) {
-        const dueDate = new Date();
-        dueDate.setMonth(dueDate.getMonth() + (i - 1));
-        await Fee.create({
-          studentId: student._id,
-          amount: 150,
-          term: `Month ${i} Tuition Fee`,
-          dueDate: dueDate,
-          status: i === 1 ? 'paid' : 'pending',
-          paymentDate: i === 1 ? new Date() : null,
-          transactionId: i === 1 ? `TXN-INIT-${Math.floor(100000 + Math.random() * 900000)}` : '',
-          paymentMethod: i === 1 ? 'Admission Desk Cash' : ''
-        });
-      }
+      // Automatically assign fee structure according to class
+      await assignFeesForStudent(student._id, student.class, false);
     }
 
     res.json({ success: true, message: `Admission application status updated to ${status}!`, data: admission });

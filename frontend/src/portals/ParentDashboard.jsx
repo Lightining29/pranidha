@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { Smile, Award, Clock, HelpCircle, CreditCard, Clipboard, CheckCircle, FileText } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import ConfirmModal from '../components/ConfirmModal.jsx';
+import ResultCardModal from '../components/ResultCardModal.jsx';
 
 export default function ParentDashboard() {
   const { user, profile } = useAuth();
@@ -12,6 +13,7 @@ export default function ParentDashboard() {
   // Fee states
   const [fees, setFees] = useState([]);
   const [payingFeeId, setPayingFeeId] = useState(null);
+  const [activeResultCard, setActiveResultCard] = useState(null);
 
   useEffect(() => {
     // Parent profile children fetch
@@ -359,6 +361,17 @@ export default function ParentDashboard() {
                               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Teacher Observation Notes</span>
                               <p className="text-slate-700 font-medium leading-relaxed italic">"{rep.notes || 'No remarks recorded.'}"</p>
                             </div>
+
+                            <div className="flex justify-end pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setActiveResultCard({ student: child, report: rep, parentName: profile?.name })}
+                                className="px-4 py-2 bg-[#5B468C] hover:bg-[#4A3970] text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>View / Print Result Card</span>
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -490,6 +503,13 @@ export default function ParentDashboard() {
             </button>
           </div>
         </div>
+      )}
+
+      {activeResultCard && (
+        <ResultCardModal
+          activeResult={activeResultCard}
+          onClose={() => setActiveResultCard(null)}
+        />
       )}
 
       <ConfirmModal

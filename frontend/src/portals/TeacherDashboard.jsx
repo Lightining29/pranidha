@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Users, Smile, Clock, Award, Clipboard, ChevronRight, Check } from 'lucide-react';
+import { Users, Smile, Clock, Award, Clipboard, ChevronRight, Check, FileText, Printer } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import ConfirmModal from '../components/ConfirmModal.jsx';
+import ResultCardModal from '../components/ResultCardModal.jsx';
 
 export default function TeacherDashboard() {
   const { user, profile } = useAuth();
@@ -22,6 +23,7 @@ export default function TeacherDashboard() {
   const [repMotor, setRepMotor] = useState(80);
   const [repNotes, setRepNotes] = useState('');
   const [publishedResult, setPublishedResult] = useState(null);
+  const [activeResultCard, setActiveResultCard] = useState(null);
 
   const [btnLoading, setBtnLoading] = useState(false);
 
@@ -434,13 +436,35 @@ export default function TeacherDashboard() {
                         <p className="text-slate-600 mt-1 italic font-medium">"{publishedResult.notes || 'No remarks recorded.'}"</p>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setPublishedResult(null)}
-                        className="w-full py-2.5 px-6 rounded-2xl bg-[#9F92EC] hover:bg-[#8C7EB5] text-white font-quicksand font-bold text-xs shadow transition-all active:scale-[0.98] cursor-pointer"
-                      >
-                        PUBLISH ANOTHER STUDENT RESULT
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveResultCard({
+                            student: selectedStudent,
+                            report: {
+                              cognitive: publishedResult.cognitive,
+                              social: publishedResult.social,
+                              creative: publishedResult.creative,
+                              motorSkills: publishedResult.motorSkills,
+                              notes: publishedResult.notes,
+                              term: publishedResult.term,
+                              createdAt: new Date().toISOString()
+                            },
+                            parentName: selectedStudent.parentId?.name || selectedStudent.parentDetails?.fatherName || selectedStudent.parentDetails?.motherName || 'N/A'
+                          })}
+                          className="flex-1 py-2.5 px-4 rounded-2xl bg-[#5B468C] hover:bg-[#4A3970] text-white font-quicksand font-bold text-xs shadow transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>View & Print</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPublishedResult(null)}
+                          className="flex-1 py-2.5 px-4 rounded-2xl bg-slate-105 hover:bg-slate-200 text-slate-600 font-quicksand font-bold text-xs shadow transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          PUBLISH ANOTHER
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -531,6 +555,13 @@ export default function TeacherDashboard() {
 
         </div>
       </div>
+
+      {activeResultCard && (
+        <ResultCardModal
+          activeResult={activeResultCard}
+          onClose={() => setActiveResultCard(null)}
+        />
+      )}
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}

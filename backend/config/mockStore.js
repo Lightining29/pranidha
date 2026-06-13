@@ -278,6 +278,81 @@ const mockStore = {
     }
   ],
 
+  feeStructures: [
+    {
+      _id: 'str_1',
+      class: 'Nursery',
+      admissionFee: 0,
+      tuitionFee: 1500,
+      computerFee: 200,
+      developmentFee: 0,
+      activityFee: 100,
+      smartClassFee: 0,
+      transportFee: 0,
+      examinationFee: 0,
+      annualCharges: 0,
+      customFees: [],
+      isActive: true,
+      createdAt: new Date()
+    },
+    {
+      _id: 'str_2',
+      class: 'LKG',
+      admissionFee: 0,
+      tuitionFee: 1800,
+      computerFee: 200,
+      developmentFee: 0,
+      activityFee: 100,
+      smartClassFee: 0,
+      transportFee: 0,
+      examinationFee: 0,
+      annualCharges: 0,
+      customFees: [],
+      isActive: true,
+      createdAt: new Date()
+    },
+    {
+      _id: 'str_3',
+      class: 'Class 1',
+      admissionFee: 0,
+      tuitionFee: 2500,
+      computerFee: 300,
+      developmentFee: 0,
+      activityFee: 200,
+      smartClassFee: 0,
+      transportFee: 0,
+      examinationFee: 0,
+      annualCharges: 0,
+      customFees: [],
+      isActive: true,
+      createdAt: new Date()
+    }
+  ],
+
+  fineRules: [
+    {
+      _id: 'fnr_1',
+      minDays: 1,
+      maxDays: 10,
+      fineAmount: 50,
+      createdAt: new Date()
+    },
+    {
+      _id: 'fnr_2',
+      minDays: 11,
+      maxDays: 20,
+      fineAmount: 100,
+      createdAt: new Date()
+    },
+    {
+      _id: 'fnr_3',
+      minDays: 21,
+      maxDays: 30,
+      fineAmount: 200,
+      createdAt: new Date()
+    }
+  ],
+
   messages: [
     {
       _id: 'msg_1',

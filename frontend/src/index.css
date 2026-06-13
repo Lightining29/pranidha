@@ -166,6 +166,8 @@
     padding: 0 !important;
     width: 100% !important;
     height: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Hide the rest of the dashboard app content */
@@ -249,5 +251,35 @@
     display: flex !important;
     flex-direction: column !important;
     justify-content: space-between !important;
+  }
+
+  /* Style the progress report card container */
+  #result-card-modal-container {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  #printable-result-card {
+    position: relative !important;
+    margin: 0 auto !important;
+    background: #FAF9F5 !important;
+    border: 6px double #D4AF37 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 670px !important;
+    padding: 24px !important;
+    border-radius: 16px !important;
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
